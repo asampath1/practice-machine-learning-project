@@ -1,0 +1,134 @@
+---
+title: "Machine Learning - Assignment- July2014"
+author: "Anand"
+date: "Monday, July 21, 2014"
+output: html_document
+---
+
+```{r}
+options(warn=-1)
+library(caret)
+library(randomForest)
+library(Hmisc)
+library(foreach)
+library(doParallel)
+set.seed(3456)
+```
+
+Reading File from the default working directory.
+
+```{r}
+pmlTraining <- read.csv("pml-training.csv", na.strings=c("#DIV/0!"))
+
+dim(pmlTraining)
+
+# commenting the summary and describe function to save running pages.
+
+# summary(pmlTraining)
+# describe(pmlTraining)
+
+```
+
+Removing the incomplete data and the not so useful features from the excel sheet. 
+
+```{r}
+
+cpmlTraining <- pmlTraining
+
+for(i in c(8:ncol(cpmlTraining)-1)) {cpmlTraining[,i] = as.numeric(as.character(cpmlTraining[,i]))}
+
+featuresnames <- colnames(cpmlTraining[colSums(is.na(cpmlTraining)) == 0])[-(1:7)]
+features <- cpmlTraining[featuresnames]
+```
+
+Splitting the dataset
+
+```{r}
+xdata <- createDataPartition(y=features$classe, p=0.75, list=FALSE)
+training <- features[xdata,]
+testing <- features[-xdata,]
+dim(training)
+dim(testing)
+
+```
+
+Applying the ***randomFores*** model to the 3/4 of the training data set.
+
+```{r}
+modelFit <- randomForest(classe~.,data=training)
+```
+
+Evaluating the model by using ConfusionMatrix method and by focussing on accuracy, sensitivity & specificity metrics
+
+Predicting the model with the training set of data i.e 3/4th of the dataset.
+
+```{r}
+
+trainingPrediction <- predict(modelFit, newdata=training)
+confusionMatrix(trainingPrediction,training$classe)
+
+accurate<-c(as.numeric(predict(modelFit,newdata=training[,-ncol(training)])==training$classe))
+accuracy<-sum(accurate)*100/nrow(training)
+message("Accuracy as tested over training set = " , format(round(accuracy, 2), nsmall = 2), "%")
+```
+
+Predicting the model with the testing set of data i.e remaining 1/4th of the dataset.
+
+```{r}
+
+testingPrediction <- predict(modelFit, newdata=testing)
+confusionMatrix(testingPrediction,testing$classe)
+
+head(testingPrediction)
+
+tail(testingPrediction)
+
+```
+
+Resampling : Cross Validation for 5 Fold  & Estimation of Error.
+
+```{r}
+tc <- trainControl(method = "cv", number = 5) # 5 number of Fold/resampling iterations
+cvFit <- train(testing$classe~.,data=testing, method="rf",trControl=tc)
+cvFit$resample # a dataframe with columns for each performance metric
+cvFit$results # a dataframe contains the error rate and value of tuning parameters
+confusionMatrix(predict(cvFit, newdata=testing), testing$classe)
+cvFit
+cvFit$finalModel # fit object using the best parameters
+
+```
+The OOb  estimate error comes around 2% with the class error ranges from 0.005 to 0.011
+The accuracy of this algorithm is very good which is at 0.9737 for best tune @ mtry =27.
+
+Now, lets predict the model in th ***pmltesting*** data set that was supplied along with the ***pmltraining*** dataset
+
+```{r}
+
+pmltesting <- read.csv("pml-testing.csv")
+
+for(i in c(8:ncol(pmltesting)-1)) {pmltesting[,i] = as.numeric(as.character(pmltesting[,i]))}
+featuresnames <- colnames(pmltesting[colSums(is.na(pmltesting)) == 0])[-(1:7)]
+features <- pmltesting[featuresnames]
+
+dim(features)
+
+testingPrediction <- predict(modelFit, newdata=features)
+testingPrediction
+
+```
+
+The below function taken from the assignment instruction page to generate the 20 test cases. I have submitted these 20 cases successfully and got the predictions 20/20 corrrect.
+
+```{r}
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(testingPrediction)
+
+```
+Thanks
